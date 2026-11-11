@@ -1,0 +1,71 @@
+PC Cleaner — componenti di terze parti / Third-party components
+==============================================================
+
+PC Cleaner è distribuito con licenza MIT (vedi LICENSE.txt).
+Il programma include i seguenti componenti, ciascuno con la propria licenza.
+PC Cleaner is MIT-licensed (see LICENSE.txt). It bundles the following
+components, each under its own license.
+
+
+1) CustomTkinter  —  interfaccia grafica / user interface
+-------------------------------------------------------------------------------
+Versione / Version: 6.0.0
+Licenza / License:  MIT — vedi customtkinter-LICENSE.txt
+Copyright:          © 2023 Tom Schimansky
+Sito / Website:     https://github.com/TomSchimansky/CustomTkinter
+Incluso senza modifiche. / Bundled unmodified.
+
+
+2) darkdetect  —  rilevamento del tema di Windows / system theme detection
+-------------------------------------------------------------------------------
+Versione / Version: 0.8.0
+Licenza / License:  BSD 3-Clause — vedi darkdetect-LICENSE.txt
+Copyright:          © 2019 Alberto Sottile
+Sito / Website:     https://github.com/albertosottile/darkdetect
+Dipendenza di CustomTkinter, inclusa senza modifiche. /
+Dependency of CustomTkinter, bundled unmodified.
+
+
+3) Send2Trash  —  spostamento nel Cestino / moving files to the Recycle Bin
+-------------------------------------------------------------------------------
+Versione / Version: 2.1.0
+Licenza / License:  BSD 3-Clause — vedi send2trash-LICENSE.txt
+Copyright:          © 2017 Virgil Dupras
+Sito / Website:     https://github.com/arsenetar/send2trash
+Incluso senza modifiche. / Bundled unmodified.
+
+
+4) Pillow  —  caricamento delle icone / icon loading
+-------------------------------------------------------------------------------
+Versione / Version: 13.0.0
+Licenza / License:  MIT-CMU (HPND) — vedi Pillow-LICENSE.txt
+Copyright:          © Jeffrey A. Clark e contributori / and contributors
+Sito / Website:     https://python-pillow.github.io
+Incluso senza modifiche. / Bundled unmodified.
+
+
+5) Python  —  interprete e libreria standard / interpreter and standard library
+-------------------------------------------------------------------------------
+Licenza / License:  Python Software Foundation License — vedi Python-LICENSE.txt
+Copyright:          © Python Software Foundation
+Sito / Website:     https://www.python.org
+
+
+6) PyInstaller (bootloader)  —  creazione del programma / app packaging
+-------------------------------------------------------------------------------
+Versione / Version: 6.22.3
+Licenza / License:  GPL-2.0 con eccezione per i programmi creati con PyInstaller /
+                    GPL-2.0 with the PyInstaller bootloader exception —
+                    vedi PyInstaller-COPYING.txt
+Sito / Website:     https://pyinstaller.org
+L'eccezione consente di distribuire il programma creato con una licenza a scelta
+dell'autore. / The exception allows the resulting program to be distributed
+under the author's own license.
+
+
+7) Icone dell'interfaccia / Interface icons
+-------------------------------------------------------------------------------
+Le icone in assets\icons sono glifi del font di sistema "Segoe MDL2 Assets"
+di Microsoft, convertiti in immagini sul PC di chi compila il programma.
+The icons in assets\icons are glyphs of Microsoft's system font
+"Segoe MDL2 Assets", converted to images on the builder's PC.

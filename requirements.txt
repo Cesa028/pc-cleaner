@@ -1,0 +1,4 @@
+customtkinter
+send2trash
+pillow
+pyinstaller
