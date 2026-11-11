@@ -1,18 +1,13 @@
 ; Script Inno Setup per PC Cleaner
-; Compilare con build_installer.bat (prima crea dist\PCCleaner\ con PyInstaller)
+; Compilare con build_installer.bat (crea dist\PCCleaner e dist_x86\PCCleaner con PyInstaller)
 
 #define AppName "PC Cleaner"
-#define AppVersion "1.2.1"
+#define AppVersion "1.2.2"
 #define AppExe "PCCleaner.exe"
 
-; Versione a 32 bit: ISCC /DX86=1 installer.iss (sorgente dist_x86\PCCleaner)
-#ifdef X86
-  #define DistDir "dist_x86"
-  #define OutName "PCCleaner-Setup-" + AppVersion + "-32bit"
-#else
-  #define DistDir "dist"
-  #define OutName "PCCleaner-Setup-" + AppVersion
-#endif
+; Installer UNICO: contiene dist\PCCleaner (64 bit) e dist_x86\PCCleaner (32 bit)
+; e all'installazione sceglie quella giusta (Is64BitInstallMode).
+#define OutName "PCCleaner-Setup-" + AppVersion
 
 [Setup]
 AppId={{24d674f5-6171-4a62-a544-f82cb9558c62}
@@ -34,10 +29,8 @@ UninstallDisplayName={#AppName}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
-#ifndef X86
-ArchitecturesAllowed=x64compatible
+; nessun ArchitecturesAllowed: parte anche su Windows a 32 bit
 ArchitecturesInstallIn64BitMode=x64compatible
-#endif
 MinVersion=10.0
 ; installa per tutti (amministratore) oppure solo per l'utente corrente, a scelta
 PrivilegesRequired=lowest
@@ -52,7 +45,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "{#DistDir}\PCCleaner\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\PCCleaner\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: Is64BitInstallMode
+Source: "dist_x86\PCCleaner\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: not Is64BitInstallMode
 Source: "LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion recursesubdirs createallsubdirs
 

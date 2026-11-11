@@ -1510,7 +1510,8 @@ class StartupPage(Page):
             self.items[iid] = it
             t.insert("", "end", iid=iid, tags=() if it.enabled else ("off",),
                      image=ui.table_image("dot_on" if it.enabled else "dot_off"),
-                     values=(it.name, "Attivo" if it.enabled else "Disattivato", it.source, it.command))
+                     values=(it.name, "Attivo" if it.enabled else "Disattivato", it.source,
+                             startup.display_command(it)))
         if self.items:
             self.empty.hide()
         else:
@@ -1547,12 +1548,8 @@ class StartupPage(Page):
         if not sel:
             return
         it = self.items[sel[0]]
-        if it.approved_sub == "StartupFolder":
-            open_in_explorer(it.command)
-            return
-        cmd = it.command.strip()
-        exe = cmd[1:cmd.find('"', 1)] if cmd.startswith('"') else cmd.split(" ")[0]
-        exe = os.path.expandvars(exe)
+        # per i collegamenti si apre il file vero (come «Apri percorso file» di Windows), non il .lnk
+        exe = startup.reveal_path(it)
         if os.path.exists(exe):
             open_in_explorer(exe)
         else:

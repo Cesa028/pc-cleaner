@@ -24,9 +24,9 @@ PC Cleaner (nel progetto: *PulisciPC*) ti aiuta a recuperare spazio su Windows 1
 
 ## Download
 
-L'installer per Windows è nella sezione **[Releases](../../releases/latest)**: scarica `PCCleaner-Setup-1.2.1.exe` ed eseguilo.
+L'installer per Windows è nella sezione **[Releases](../../releases/latest)**: scarica `PCCleaner-Setup-1.2.2.exe` (Windows 10/11, 32 e 64 bit: sceglie da solo la versione giusta) ed eseguilo.
 
-Per Windows a 32 bit (x86) c'è `PCCleaner-Setup-1.2.1-32bit.exe`: stesse funzioni, stessa licenza. PC Cleaner usa CustomTkinter/tkinter, che esistono anche a 32 bit; Prisma e Audio Extractor usano Qt 6, che non ha build a 32 bit per Windows, quindi per loro esiste solo la versione a 64 bit.
+PC Cleaner usa CustomTkinter/tkinter, che esistono anche a 32 bit; Prisma e Audio Extractor usano Qt 6, che non ha build a 32 bit per Windows, quindi per loro esiste solo la versione a 64 bit.
 
 ## Funzionalità
 
@@ -42,6 +42,10 @@ Per Windows a 32 bit (x86) c'è `PCCleaner-Setup-1.2.1-32bit.exe`: stesse funzio
 - **Duplicati**: confronto per contenuto tramite hash (BLAKE2b) in tre passaggi progressivi; almeno una copia di ogni file resta sempre al suo posto.
 - **Avvio automatico**: elenco dei programmi che partono con Windows, con attivazione e disattivazione reversibili, come in Gestione attività.
 - **Riavvio come amministratore** con un clic, per sbloccare le pulizie delle cartelle di sistema.
+
+### Novità della versione 1.2.2
+
+- **Avvio automatico**: la versione a 32 bit su Windows a 64 bit ora mostra lo stesso stato di Gestione attività; per i collegamenti mostra il programma vero e Apri posizione apre il suo file.
 
 ### Novità della versione 1.2.1
 
@@ -90,9 +94,8 @@ python -m venv .venv
 
 ```bat
 build.bat             :: genera le icone e compila dist\PCCleaner\ con PyInstaller
-build_installer.bat   :: crea installer\PCCleaner-Setup-<versione>.exe (richiede Inno Setup 6)
-build_installer_x86.bat :: versione a 32 bit: serve un Python a 32 bit con tkinter, indicato con `set PY32=C:\...\python.exe`;
-                         usa build_x86\ e dist_x86\ e crea installer\PCCleaner-Setup-<versione>-32bit.exe (ISCC /DX86=1)
+build_installer.bat   :: crea l'installer unico installer\PCCleaner-Setup-<versione>.exe (32 e 64 bit, richiede Inno Setup 6);
+                         con `set PY32=C:\...\python.exe` (Python a 32 bit con tkinter) ricostruisce anche dist_x86\nbuild_installer_x86.bat :: costruisce solo dist_x86\PCCleaner (chiamato da build_installer.bat, usabile anche da solo)
 ```
 
 Le icone dell'interfaccia (`assets\icons`) si rigenerano con `make_icons.py`, che usa il font di sistema *Segoe MDL2 Assets*.

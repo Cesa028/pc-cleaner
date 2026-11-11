@@ -1,6 +1,12 @@
 # PC Cleaner — Documentazione
 
-Versione 1.2.1 · Windows 10/11 a 64 bit · Python 3.13 + customtkinter
+Versione 1.2.2 · Windows 10/11 a 64 bit · Python 3.13 + customtkinter
+
+---
+
+## Novità
+
+- **1.2.2** · Avvio automatico: la versione a 32 bit su Windows a 64 bit ora mostra lo stesso stato di Gestione attività; per i collegamenti mostra il programma vero e Apri posizione apre il suo file.
 
 ---
 
@@ -62,9 +68,11 @@ Come vengono calcolate le dimensioni:
 
 ### 2.5 Avvio automatico
 - Elenca i programmi che partono con Windows. Le fonti sono il registro (`Run` dell'utente, `Run` per tutti gli utenti, `Run` a 32 bit) e le cartelle Esecuzione automatica.
+- Le chiavi di registro vengono lette con viste WOW64 esplicite (64 e 32 bit), così anche la versione a 32 bit su Windows a 64 bit legge `Run` e `StartupApproved` nella vista giusta e mostra lo stesso stato di Gestione attività.
+- Per i collegamenti (`.lnk`) la destinazione vera viene risolta con una chiamata PowerShell (in cache): la colonna Comando mostra il programma vero e «Apri posizione» apre la sua cartella con il file selezionato.
 - **Disattiva** e **Attiva** usano lo stesso meccanismo di Gestione attività (le chiavi `StartupApproved`): non cancellano niente, sono sempre reversibili e Windows mostra lo stesso stato.
 - Le voci «tutti gli utenti» richiedono l'amministratore.
-- «Apri posizione» apre il file eseguibile. Se l'eseguibile non esiste più, di solito è un avvio rimasto da un programma disinstallato.
+- «Apri posizione» apre il file eseguibile (per un collegamento, quello di destinazione). Se l'eseguibile non esiste più, di solito è un avvio rimasto da un programma disinstallato.
 
 ---
 
@@ -102,7 +110,7 @@ Punti chiave:
 - **Simboli nelle tabelle.** Le caselle di selezione dei duplicati e i pallini dello stato dell'avvio automatico sono immagini disegnate con Pillow (`ui.table_image`), non caratteri Unicode. Restano solo i segni tipografici nei testi (… · — •).
 - **Registro.** Ogni eliminazione, spostamento nel cestino e modifica dell'avvio viene scritta in `%LOCALAPPDATA%\PC Cleaner\registro.txt`.
 ### Ricompilare
-Fai doppio clic su `build.bat`. Se manca, crea il `.venv` e installa `customtkinter`, `send2trash`, `pillow` e `pyinstaller`. Il risultato è `dist\PCCleaner.exe`. Le icone dell'interfaccia sono già in `assets\icons`; si rigenerano con `make_icons.py` solo se cambi i glifi.
+Fai doppio clic su `build.bat`. Se manca, crea il `.venv` e installa `customtkinter`, `send2trash`, `pillow` e `pyinstaller`. Il risultato è `dist\PCCleaner.exe`. Per l'installer unico (Windows 32 e 64 bit, sceglie da solo la build giusta) usa `build_installer.bat`: include `dist\PCCleaner` (64 bit) e `dist_x86\PCCleaner` (32 bit, costruita da `build_installer_x86.bat`; con `set PY32=...` viene rifatta in automatico) e produce `installer\PCCleaner-Setup-<versione>.exe`. Le icone dell'interfaccia sono già in `assets\icons`; si rigenerano con `make_icons.py` solo se cambi i glifi.
 
 ---
 
