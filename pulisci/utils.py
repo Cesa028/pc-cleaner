@@ -11,7 +11,7 @@ import sys
 from ctypes import wintypes
 
 APP_NAME = "PC Cleaner"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 APP_SITE = "https://github.com/Cesa028/pc-cleaner"
 
 

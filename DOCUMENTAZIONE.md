@@ -1,6 +1,6 @@
 # PC Cleaner — Documentazione
 
-Versione 1.2.0 · Windows 10/11 a 64 bit · Python 3.13 + customtkinter
+Versione 1.2.1 · Windows 10/11 a 64 bit · Python 3.13 + customtkinter
 
 ---
 

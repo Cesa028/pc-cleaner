@@ -24,9 +24,9 @@ PC Cleaner (nel progetto: *PulisciPC*) ti aiuta a recuperare spazio su Windows 1
 
 ## Download
 
-L'installer per Windows è nella sezione **[Releases](../../releases/latest)**: scarica `PCCleaner-Setup-1.2.0.exe` ed eseguilo.
+L'installer per Windows è nella sezione **[Releases](../../releases/latest)**: scarica `PCCleaner-Setup-1.2.1.exe` ed eseguilo.
 
-Per Windows a 32 bit (x86) c'è `PCCleaner-Setup-1.2.0-32bit.exe`: stesse funzioni, stessa licenza. PC Cleaner usa CustomTkinter/tkinter, che esistono anche a 32 bit; Prisma e Audio Extractor usano Qt 6, che non ha build a 32 bit per Windows, quindi per loro esiste solo la versione a 64 bit.
+Per Windows a 32 bit (x86) c'è `PCCleaner-Setup-1.2.1-32bit.exe`: stesse funzioni, stessa licenza. PC Cleaner usa CustomTkinter/tkinter, che esistono anche a 32 bit; Prisma e Audio Extractor usano Qt 6, che non ha build a 32 bit per Windows, quindi per loro esiste solo la versione a 64 bit.
 
 ## Funzionalità
 
@@ -42,6 +42,10 @@ Per Windows a 32 bit (x86) c'è `PCCleaner-Setup-1.2.0-32bit.exe`: stesse funzio
 - **Duplicati**: confronto per contenuto tramite hash (BLAKE2b) in tre passaggi progressivi; almeno una copia di ogni file resta sempre al suo posto.
 - **Avvio automatico**: elenco dei programmi che partono con Windows, con attivazione e disattivazione reversibili, come in Gestione attività.
 - **Riavvio come amministratore** con un clic, per sbloccare le pulizie delle cartelle di sistema.
+
+### Novità della versione 1.2.1
+
+- **Robustezza**: asset mancanti (logo, icone) non bloccano l'avvio; disinstallazione più prudente (rimuove solo i file installati).
 
 ### Novità della versione 1.2.0
 

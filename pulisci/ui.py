@@ -11,6 +11,7 @@ from tkinter import ttk
 import customtkinter as ctk
 from PIL import Image
 
+from .utils import log
 from .filters import MODIFIED, SIZES, SORTS, KINDS, Filters, parse_exts
 
 FONT = "Segoe UI"
@@ -81,14 +82,19 @@ def icon(name: str, on_accent: bool = False, size: int = 18):
                 _icon_cache[key] = ctk.CTkImage(light_image=Image.open(resource("icons", f"{name}_l.png")),
                                                 dark_image=Image.open(resource("icons", f"{name}_d.png")),
                                                 size=(size, size))
-        except OSError:
+        except Exception as ex:   # un asset mancante o illeggibile non deve mai bloccare l'app
+            log(f"Icona non caricata ({name}): {ex}")
             _icon_cache[key] = None
     return _icon_cache[key]
 
 
 def logo(size: int = 40):
-    img = Image.open(resource("icon.png"))
-    return ctk.CTkImage(light_image=img, dark_image=img, size=(size, size))
+    try:
+        img = Image.open(resource("icon.png"))
+        return ctk.CTkImage(light_image=img, dark_image=img, size=(size, size))
+    except Exception as ex:   # logo mancante: l'app parte senza
+        log(f"Logo non caricato: {ex}")
+        return None
 
 
 # ---------------------------------------------------------------- pulsanti

@@ -33,7 +33,7 @@ if not exist %ISCC% (
 %ISCC% /DX86=1 installer.iss
 if errorlevel 1 goto :fail
 echo.
-echo Fatto: installer\PCCleaner-Setup-1.2.0-32bit.exe
+echo Fatto: installer\PCCleaner-Setup-1.2.1-32bit.exe
 exit /b 0
 
 :fail

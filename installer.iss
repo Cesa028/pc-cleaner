@@ -2,7 +2,7 @@
 ; Compilare con build_installer.bat (prima crea dist\PCCleaner\ con PyInstaller)
 
 #define AppName "PC Cleaner"
-#define AppVersion "1.2.0"
+#define AppVersion "1.2.1"
 #define AppExe "PCCleaner.exe"
 
 ; Versione a 32 bit: ISCC /DX86=1 installer.iss (sorgente dist_x86\PCCleaner)
@@ -66,4 +66,4 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
-Type: filesandordirs; Name: "{app}"
+Type: dirifempty; Name: "{app}"
