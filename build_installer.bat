@@ -11,7 +11,7 @@ if errorlevel 1 (
 .venv\Scripts\python make_icon.py
 .venv\Scripts\python make_icons.py
 .venv\Scripts\python -m PyInstaller --noconfirm --clean --onedir --windowed --name PCCleaner ^
-    --icon assets\icon.ico --add-data "assets;assets" --collect-data customtkinter main.py
+    --icon assets\icon.ico --add-data "assets;assets" --add-data "LICENSE.txt;." --add-data "licenses;licenses" --collect-data customtkinter main.py
 if errorlevel 1 goto :fail
 
 set ISCC="%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"

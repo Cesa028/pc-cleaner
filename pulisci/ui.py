@@ -16,19 +16,26 @@ from .filters import MODIFIED, SIZES, SORTS, KINDS, Filters, parse_exts
 FONT = "Segoe UI"
 
 # colori: (tema chiaro, tema scuro)
-ACCENT = ("#138a55", "#24a867")
-ACCENT_HOVER = ("#0f7046", "#2bb673")
-DANGER = ("#d92d20", "#f04438")
-DANGER_HOVER = ("#b42318", "#d92d20")
+# I colori dei pulsanti pieni (ACCENT, DANGER) sono scelti perche' il testo bianco sopra abbia contrasto >= 4,5:1
+# in entrambi i temi (verifica: contrast_check.py)
+ON_ACCENT = "#ffffff"
+ACCENT = ("#0f7a4b", "#127a4d")
+ACCENT_HOVER = ("#0b6b40", "#0e6a42")
+DANGER = ("#d92d20", "#cf3126")
+DANGER_HOVER = ("#b42318", "#a91f15")
 WARN = ("#b54708", "#fdb022")
-OK = ("#138a55", "#4ade80")
+OK = ("#0f7a4b", "#4ade80")
+FOCUS = ("#0b5fd1", "#8ab4ff")      # anello del focus da tastiera
+BAR_OK = OK                          # barre dei dischi (grafici, contrasto >= 3:1 sulla traccia)
+BAR_WARN = WARN
+BAR_DANGER = ("#d92d20", "#f97066")
 BG = ("#f2f4f7", "#14161a")
 SURFACE = ("#ffffff", "#1c1f25")
 SURFACE_ALT = ("#f2f4f7", "#262a32")
 HOVER = ("#e4e7ec", "#303540")
 BORDER = ("#e4e7ec", "#2b303a")
 TEXT = ("#101828", "#eef1f6")
-MUTED = ("#667085", "#98a2b3")
+MUTED = ("#586174", "#98a2b3")
 NAV_SEL = ("#dcf5e8", "#1d3a2c")
 NAV_SEL_TEXT = ("#0b6b40", "#7ee2a8")
 
@@ -121,11 +128,27 @@ def option_menu(master, values, command=None, width: int | None = None, height: 
     return ctk.CTkOptionMenu(master, **opts)
 
 
-def segmented(master, values, command=None, height: int = 36) -> ctk.CTkSegmentedButton:
-    return ctk.CTkSegmentedButton(master, values=list(values), command=command, height=height, corner_radius=10,
-                                  font=(FONT, 13), fg_color=SURFACE_ALT, selected_color=ACCENT,
-                                  selected_hover_color=ACCENT_HOVER, unselected_color=SURFACE_ALT,
-                                  unselected_hover_color=HOVER, text_color=TEXT)
+class Segmented(ctk.CTkSegmentedButton):
+    """Selettore a segmenti: il segmento attivo ha testo bianco su verde, gli altri testo normale (contrasto >= 4,5:1)."""
+
+    def _select_button_by_value(self, value):
+        super()._select_button_by_value(value)
+        self._buttons_dict[value].configure(text_color=ON_ACCENT)
+
+    def _unselect_button_by_value(self, value):
+        super()._unselect_button_by_value(value)
+        if value in self._buttons_dict:
+            self._buttons_dict[value].configure(text_color=TEXT)
+
+
+def segmented(master, values, command=None, height: int = 36, size: int = 13) -> Segmented:
+    seg = Segmented(master, values=list(values), command=command, height=height, corner_radius=10,
+                    font=(FONT, size), fg_color=SURFACE_ALT, selected_color=ACCENT,
+                    selected_hover_color=ACCENT_HOVER, unselected_color=SURFACE_ALT,
+                    unselected_hover_color=HOVER, text_color=TEXT)
+    for b in seg._buttons_dict.values():
+        b.configure(text_color=TEXT)
+    return seg
 
 
 def entry(master, placeholder: str = "", height: int = 34) -> ctk.CTkEntry:
@@ -203,10 +226,231 @@ def label(master, text: str, size: int = 13, bold: bool = False, muted: bool = F
     return ctk.CTkLabel(master, text=text, **kw)
 
 
-def bar_text(frac: float, width: int = 10) -> str:
-    frac = max(0.0, min(1.0, frac))
-    full = int(round(frac * width))
-    return "▰" * full + "▱" * (width - full) + f"  {frac * 100:.1f}%".replace(".", ",")
+def pct_text(frac: float) -> str:
+    return f"{max(0.0, min(1.0, frac)) * 100:.1f} %".replace(".", ",")
+
+
+def hide(widget) -> None:
+    """Nasconde un widget gestito da pack o, dentro una FlowBar, da place."""
+    widget.pack_forget()
+    widget.place_forget()
+
+
+# ---------------------------------------------------------------- suggerimenti (tooltip)
+class Tooltip:
+    """Suggerimento che compare dopo mezzo secondo sopra un widget. `text` e' una stringa o una funzione
+    che la restituisce (stringa vuota = niente suggerimento): cosi' cambia con lo stato del pulsante."""
+
+    def __init__(self, widget, text, delay: int = 500):
+        self.widget, self.text, self.delay = widget, text, delay
+        self._tip = None
+        self._after = None
+        widget.bind("<Enter>", self._enter, add="+")
+        widget.bind("<Leave>", self._leave, add="+")
+        widget.bind("<ButtonPress>", lambda e: self._hide(), add="+")
+
+    def _enter(self, _=None):
+        self._cancel()
+        if self._tip is None:
+            self._after = self.widget.after(self.delay, self._show)
+
+    def _leave(self, _=None):
+        self._cancel()
+        self._after = self.widget.after(80, self._hide)   # breve attesa: passando da un figlio all'altro non sfarfalla
+
+    def _cancel(self):
+        if self._after:
+            try:
+                self.widget.after_cancel(self._after)
+            except tk.TclError:
+                pass
+            self._after = None
+
+    def _hide(self):
+        self._cancel()
+        if self._tip is not None:
+            try:
+                self._tip.destroy()
+            except tk.TclError:
+                pass
+            self._tip = None
+
+    def _show(self):
+        self._after = None
+        text = self.text() if callable(self.text) else self.text
+        if not text or self._tip is not None:
+            return
+        try:
+            dark = ctk.get_appearance_mode() == "Dark"
+            bg, fg = ("#eef1f6", "#101828") if dark else ("#1f2430", "#f5f7fa")
+            tip = tk.Toplevel(self.widget)
+            tip.wm_overrideredirect(True)
+            tip.attributes("-topmost", True)
+            tk.Label(tip, text=text, bg=bg, fg=fg, font=pt(11), padx=10, pady=5, bd=0, justify="left").pack()
+            tip.update_idletasks()
+            w, h = tip.winfo_reqwidth(), tip.winfo_reqheight()
+            x = self.widget.winfo_rootx() + 8
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+            sw, sh = tip.winfo_screenwidth(), tip.winfo_screenheight()
+            if y + h > sh - 40:   # niente spazio sotto: sopra il widget
+                y = self.widget.winfo_rooty() - h - 6
+            tip.wm_geometry(f"+{max(0, min(x, sw - w - 8))}+{max(0, y)}")
+            self._tip = tip
+        except tk.TclError:
+            self._tip = None
+
+
+# ---------------------------------------------------------------- tastiera e focus
+def _disabled(w) -> bool:
+    try:
+        return str(w.cget("state")) == "disabled"
+    except Exception:
+        return False
+
+
+def _focusable(w, on_in, on_out, activate=None) -> None:
+    """Rende un widget CustomTkinter raggiungibile con Tab, con anello di focus e attivazione con Spazio/Invio."""
+    tk.Frame.configure(w, takefocus=w.register(lambda *a: 0 if _disabled(w) else 1))
+    tk.Frame.bind(w, "<FocusIn>", lambda e: on_in(), add="+")
+    tk.Frame.bind(w, "<FocusOut>", lambda e: on_out(), add="+")
+    if activate:
+        def go(e):
+            if not _disabled(w):
+                activate()
+            return "break"
+        tk.Frame.bind(w, "<space>", go, add="+")
+        tk.Frame.bind(w, "<Return>", go, add="+")
+
+
+def a11y_pass(root) -> None:
+    """Percorre i widget (anche quelli creati dopo, richiamandola) e dona a ognuno focus da tastiera visibile."""
+    for w in root.winfo_children():
+        a11y_pass(w)
+        if getattr(w, "_a11y", False):
+            continue
+        saved = {}
+        try:
+            if isinstance(w, ctk.CTkButton):
+                def on_in(w=w, s=saved):
+                    s["v"] = (w.cget("border_width"), w.cget("border_color"))
+                    w.configure(border_width=2, border_color=FOCUS)
+
+                def on_out(w=w, s=saved):
+                    if "v" in s:
+                        w.configure(border_width=s["v"][0], border_color=s["v"][1])
+                _focusable(w, on_in, on_out, w.invoke)
+            elif isinstance(w, ctk.CTkCheckBox):
+                def on_in(w=w, s=saved):
+                    s["v"] = w.cget("border_color")
+                    w.configure(border_color=FOCUS)
+
+                def on_out(w=w, s=saved):
+                    if "v" in s:
+                        w.configure(border_color=s["v"])
+                _focusable(w, on_in, on_out, w.toggle)
+            elif isinstance(w, ctk.CTkOptionMenu):
+                def on_in(w=w, s=saved):
+                    s["v"] = w.cget("button_color")
+                    w.configure(button_color=FOCUS)
+
+                def on_out(w=w, s=saved):
+                    if "v" in s:
+                        w.configure(button_color=s["v"])
+                _focusable(w, on_in, on_out, w._clicked)
+            elif isinstance(w, ctk.CTkEntry):
+                inner = w._entry
+
+                def on_in(w=w, s=saved):
+                    s["v"] = w.cget("border_color")
+                    w.configure(border_color=FOCUS)
+
+                def on_out(w=w, s=saved):
+                    if "v" in s:
+                        w.configure(border_color=s["v"])
+                inner.bind("<FocusIn>", lambda e: on_in(), add="+")
+                inner.bind("<FocusOut>", lambda e: on_out(), add="+")
+            else:
+                continue
+            w._a11y = True
+        except Exception:   # un widget insolito non deve mai impedire l'avvio
+            continue
+
+
+# ---------------------------------------------------------------- immagini per le tabelle (checkbox e pallini)
+_IMGS: dict = {}
+
+
+def _supersampled(draw, px: int):
+    from PIL import ImageDraw
+    k = 4
+    img = Image.new("RGBA", (px * k, px * k), (0, 0, 0, 0))
+    draw(ImageDraw.Draw(img), px * k, k)
+    return img.resize((px, px), Image.Resampling.LANCZOS)
+
+
+def table_image(kind: str):
+    """Immagini indipendenti dal tema per le righe delle tabelle: casella (off/on/part) e pallino (dot_on/dot_off)."""
+    if kind not in _IMGS:
+        from PIL import ImageTk
+        px = max(12, int(16 * SCALE))
+        green, grey = "#0f7a4b", "#667085"
+
+        def draw(d, n, k):
+            m = k
+            if kind.startswith("dot"):
+                col = green if kind == "dot_on" else "#98a2b3"
+                d.ellipse((n * .22, n * .22, n * .78, n * .78), fill=col)
+                return
+            box = (m, m, n - m - 1, n - m - 1)
+            if kind == "off":
+                d.rounded_rectangle(box, radius=3 * k, fill="#ffffff", outline=grey, width=2 * k)
+                return
+            d.rounded_rectangle(box, radius=3 * k, fill=green, outline="#ffffff", width=2 * k)
+            if kind == "on":
+                d.line([(n * .26, n * .52), (n * .43, n * .68), (n * .75, n * .33)], fill="#ffffff", width=int(2.4 * k),
+                       joint="curve")
+            else:
+                d.line([(n * .28, n * .5), (n * .72, n * .5)], fill="#ffffff", width=int(2.4 * k))
+        _IMGS[kind] = ImageTk.PhotoImage(_supersampled(draw, px))
+    return _IMGS[kind]
+
+
+# ---------------------------------------------------------------- stato vuoto
+class EmptyState(ctk.CTkFrame):
+    """Messaggio al posto di una tabella vuota: icona, spiegazione e, se serve, un'azione. Si sovrappone al contenitore."""
+
+    def __init__(self, master, ic: str = "info"):
+        super().__init__(master, fg_color=SURFACE, corner_radius=10)
+        self._ic = ic
+        box = ctk.CTkFrame(self, fg_color="transparent")
+        box.place(relx=0.5, rely=0.46, anchor="center")
+        self._img = ctk.CTkLabel(box, text="")
+        self._img.pack()
+        self._title = ctk.CTkLabel(box, text="", font=(FONT, 17, "bold"), text_color=TEXT)
+        self._title.pack(pady=(10, 4))
+        self._text = ctk.CTkLabel(box, text="", font=(FONT, 13), text_color=MUTED, wraplength=460, justify="center")
+        self._text.pack()
+        self._btn_holder = ctk.CTkFrame(box, fg_color="transparent")
+        self._btn_holder.pack(pady=(16, 0))
+        self._btn = None
+
+    def show(self, title: str, text: str, action: str | None = None, command=None, ic: str | None = None,
+             action_icon: str | None = None) -> None:
+        self._img.configure(image=icon(ic or self._ic, size=44))
+        self._title.configure(text=title)
+        self._text.configure(text=text)
+        if self._btn is not None:
+            self._btn.destroy()
+            self._btn = None
+        if action:
+            self._btn = button(self._btn_holder, action, action_icon, "primary", command, height=38, width=170)
+            self._btn.pack()
+            a11y_pass(self._btn_holder)
+        tk.Frame.place(self, x=2, y=2, relwidth=1, relheight=1, width=-4, height=-4)
+        self.tkraise()
+
+    def hide(self) -> None:
+        self.place_forget()
 
 
 # ---------------------------------------------------------------- rotellina del mouse
@@ -330,6 +574,13 @@ _TEXTS: list = []   # (testo, contenitore) da ricolorare al cambio di tema
 
 def register_text(text, box) -> None:
     _TEXTS.append((text, box))
+    box._focused = False
+
+    def focus(on):
+        box._focused = on
+        _color_texts()
+    text.bind("<FocusIn>", lambda e: focus(True), add="+")
+    text.bind("<FocusOut>", lambda e: focus(False), add="+")
     _color_texts()
 
 
@@ -340,7 +591,8 @@ def _color_texts() -> None:
     for text, box in _TEXTS:
         try:
             text.configure(bg=bg, fg=fg, insertbackground=fg, selectbackground=ACCENT[1 if dark else 0])
-            box.configure(bg=bg, highlightbackground=border, highlightcolor=border)
+            box.configure(bg=bg, highlightbackground=FOCUS[1 if dark else 0] if box._focused else border,
+                          highlightthickness=2 if box._focused else 1)
         except tk.TclError:
             pass
 

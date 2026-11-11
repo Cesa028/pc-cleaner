@@ -1,9 +1,11 @@
 """Interfaccia grafica di PC Cleaner: barra laterale e una pagina per funzione (create al primo utilizzo)."""
 from __future__ import annotations
 
+import ctypes
 import datetime as dt
 import os
 import queue
+import re
 import threading
 import tkinter as tk
 import traceback
@@ -13,25 +15,31 @@ import customtkinter as ctk
 from send2trash import send2trash
 
 from . import analyzer, cleaner, duplicates, startup, ui
+from .dialogs import AboutDialog
 from .filters import Filters, sort_entries
-from .ui import (ACCENT, ACCENT_HOVER, BG, BORDER, DANGER, FONT, HOVER, MUTED, NAV_SEL, NAV_SEL_TEXT, OK, SURFACE,
-                 SURFACE_ALT, TEXT, WARN, Card, FilterBar, FlowBar, bar_text, button, icon, label, logo, make_tree,
-                 option_menu, page_header, segmented)
-from .utils import (APP_NAME, APP_VERSION, data_dir, empty_recycle_bin, env, fmt_size, is_admin, list_drives, log,
-                    open_cleanmgr_admin, open_in_explorer, protected_path, recycle_bin_info, relaunch_as_admin, running_processes)
+from .settings import THEMES, Settings
+from .ui import (ACCENT, ACCENT_HOVER, BAR_DANGER, BAR_OK, BAR_WARN, BG, BORDER, FONT, HOVER, MUTED, NAV_SEL,
+                 NAV_SEL_TEXT, OK, SURFACE, SURFACE_ALT, TEXT, WARN, Card, EmptyState, FilterBar, FlowBar, Tooltip,
+                 button, icon, label, logo, make_tree, option_menu, page_header, pct_text, segmented)
+from .utils import (APP_NAME, APP_VERSION, data_dir, empty_recycle_bin, env, explain_error, fmt_size, is_admin,
+                    list_drives, log, open_cleanmgr_admin, open_in_explorer, protected_path, recycle_bin_info,
+                    relaunch_as_admin, running_processes, system_prefers_light)
 
 NAV = (("home", "Panoramica", "home"), ("clean", "Pulizia", "clean"), ("space", "Analisi spazio", "analyze"),
        ("dups", "Duplicati", "copy"), ("startup", "Avvio automatico", "power"))
 
 
 class App(ctk.CTk):
-    def __init__(self):
+    def __init__(self, settings: Settings | None = None):
         super().__init__()
+        self.settings = settings or Settings()
         self.title(f"{APP_NAME} {APP_VERSION}" + ("  —  Amministratore" if is_admin() else ""))
-        # dimensione iniziale: 85% dello schermo, al massimo 1280x840; la finestra si può ridurre fino a 720x560
-        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
-        self._center(min(1280, int(sw * 0.85)), min(840, int(sh * 0.85)))
         self.minsize(720, 560)
+        self._normal_geo: dict | None = None
+        self._restore_geometry()
+        self._about = None
+        self._narrow = False
+        self._collapse_pref = bool(self.settings.get("sidebar_collapsed"))
         self._collapsed = False
         self.bind("<Configure>", self._on_resize)
         self.configure(fg_color=BG)
@@ -58,7 +66,12 @@ class App(ctk.CTk):
         self._pages: dict[str, Page] = {}
         self._current: str | None = None
         ui.style_trees(self)
-        self.show("home")
+        self._apply_collapsed()
+        page = self.settings.get("page")
+        self.show(page if page in self._page_cls else "home")
+        self._bind_keys()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.after(2500, self._poll_system_theme)
 
     # ---------------------------------------------------------------- thread → interfaccia
     def ui(self, fn, *args):
@@ -86,13 +99,91 @@ class App(ctk.CTk):
                 res = work()
             except Exception as ex:
                 log("ERRORE: " + traceback.format_exc())
-                self.ui(error or (lambda e: messagebox.showerror(APP_NAME, f"Si è verificato un errore:\n{e}")), ex)
+                self.ui(error or (lambda e: self.error_box("Non è stato possibile completare l'operazione.", e)), ex)
                 return
             if done:
                 self.ui(done, res)
         threading.Thread(target=worker, daemon=True).start()
 
+    def error_box(self, what: str, ex: BaseException) -> None:
+        """Errore comprensibile per l'utente; il dettaglio tecnico va nel registro attività."""
+        log(f"ERRORE ({what}): {ex!r}")
+        messagebox.showerror(APP_NAME, f"{what}\n\n{explain_error(ex)}\n\n"
+                                       "I dettagli tecnici sono nel registro attività (pulsante in basso a sinistra).")
+
     # ---------------------------------------------------------------- finestra
+    def _geo_dict(self) -> dict | None:
+        nums = [int(n) for n in re.findall(r"-?\d+", self.geometry())]
+        return dict(zip(("w", "h", "x", "y"), nums)) if len(nums) == 4 else None
+
+    def _restore_geometry(self) -> None:
+        """Ripristina dimensione e posizione salvate, tenendo la finestra dentro lo schermo."""
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        g = self.settings.get("window")
+        try:
+            w, h, x, y = (int(g[k]) for k in ("w", "h", "x", "y"))
+        except (TypeError, KeyError, ValueError):
+            # prima apertura: 85% dello schermo, al massimo 1280x840
+            self._center(min(1280, int(sw * 0.85)), min(840, int(sh * 0.85)))
+            return
+        try:
+            gm = ctypes.windll.user32.GetSystemMetrics   # area di tutti i monitor
+            vx, vy, vw, vh = gm(76), gm(77), gm(78), gm(79)
+        except Exception:
+            vx, vy, vw, vh = 0, 0, sw, sh
+        if vw <= 0 or vh <= 0:
+            vx, vy, vw, vh = 0, 0, sw, sh
+        k = ctk.ScalingTracker.get_window_scaling(self)
+        w, h = max(720, min(w, int((vw - 40) / k))), max(560, min(h, int((vh - 80) / k)))
+        x = min(max(x, vx - int(w * k) + 120), vx + vw - 120)   # almeno 120 px della barra del titolo visibili
+        y = min(max(y, vy), vy + vh - 80)
+        self.geometry(f"{w}x{h}+{x}+{y}")
+        self._normal_geo = {"w": w, "h": h, "x": x, "y": y}
+        if g.get("zoomed"):
+            self.after(60, lambda: self.state("zoomed"))
+
+    def _save_window(self) -> None:
+        try:
+            zoomed = self.state() == "zoomed"
+            geo = self._normal_geo if zoomed else self._geo_dict()
+            if geo:
+                self.settings.set("window", dict(geo, zoomed=zoomed), save=False)
+            self.settings.save()
+        except tk.TclError:
+            pass
+
+    def _on_close(self) -> None:
+        self._save_window()
+        self.destroy()
+
+    # ---------------------------------------------------------------- tastiera
+    def _bind_keys(self) -> None:
+        for i, (key, _, _) in enumerate(NAV, start=1):
+            self.bind_all(f"<Control-Key-{i}>", lambda e, k=key: self._shortcut(lambda: self.show(k)))
+        self.bind_all("<F5>", lambda e: self._shortcut(lambda: self._pages[self._current].refresh()))
+        self.bind_all("<Escape>", lambda e: self._shortcut(lambda: self._pages[self._current].cancel()))
+        self.bind_all("<F1>", lambda e: self._shortcut(self.show_about))
+        self.bind_all("<Control-b>", lambda e: self._shortcut(self._toggle_collapse, typing_ok=False))
+
+    def _shortcut(self, fn, typing_ok: bool = True):
+        """Esegue una scorciatoia solo se la finestra principale e' attiva (non una finestra di dialogo)."""
+        try:
+            w = self.focus_get()
+        except (KeyError, tk.TclError):
+            w = None
+        if w is not None and w.winfo_toplevel() is not self:
+            return None
+        if not typing_ok and w is not None and w.winfo_class() in ("Entry", "Text"):
+            return None
+        fn()
+        return "break"
+
+    def show_about(self) -> None:
+        if self._about is not None and self._about.winfo_exists():
+            self._about.lift()
+            return
+        self._about = AboutDialog(self)
+
     def _center(self, w: int, h: int) -> None:
         """Apre la finestra al centro dello schermo (senza uscire dallo schermo)."""
         sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
@@ -103,10 +194,22 @@ class App(ctk.CTk):
     def _on_resize(self, event):
         if event.widget is not self:
             return
-        narrow = event.width < 1000
-        if narrow != self._collapsed:
-            self._collapsed = narrow
-            self._set_collapsed(narrow)
+        if self.state() == "normal":
+            self._normal_geo = self._geo_dict() or self._normal_geo
+        self._narrow = event.width < 1000
+        self._apply_collapsed()
+
+    def _apply_collapsed(self, force: bool = False) -> None:
+        want = self._collapse_pref or self._narrow
+        if want != self._collapsed or force:
+            self._collapsed = want
+            self._set_collapsed(want)
+
+    def _toggle_collapse(self) -> None:
+        self._collapse_pref = not self._collapse_pref
+        self.settings.set("sidebar_collapsed", self._collapse_pref)
+        self._nav_text["collapse"] = "  Espandi barra" if self._collapse_pref else "  Comprimi barra"
+        self._apply_collapsed(force=True)
 
     def _set_collapsed(self, collapsed: bool) -> None:
         """Barra laterale ridotta alle sole icone quando la finestra è stretta."""
@@ -114,7 +217,7 @@ class App(ctk.CTk):
         for name in (self._brand_name, self._brand_ver):
             name.grid_remove() if collapsed else name.grid()
         self.brand.grid_configure(padx=(16 if collapsed else 20), pady=(22, 26))
-        for key, b in self.nav.items():
+        for key, b in {**self.nav, **self._foot}.items():
             b.configure(text="" if collapsed else self._nav_text[key], width=40 if collapsed else 192,
                         compound="top" if collapsed else "left", anchor="center" if collapsed else "w")
         for box in (self.admin_box, self.bottom_box):
@@ -147,6 +250,7 @@ class App(ctk.CTk):
             b.grid(row=1 + i, column=0, sticky="ew", padx=14, pady=3)
             self.nav[key] = b
             self._nav_text[key] = f"  {text}"
+            Tooltip(b, f"{text} (Ctrl+{i + 1})")
 
         admin = ctk.CTkFrame(sb, fg_color=BG, corner_radius=12)
         self.admin_box = admin
@@ -172,18 +276,48 @@ class App(ctk.CTk):
 
         bottom = ctk.CTkFrame(sb, fg_color="transparent")
         self.bottom_box = bottom
-        bottom.grid(row=8, column=0, sticky="ew", padx=14, pady=(0, 18))
-        self.theme = segmented(bottom, ["Chiaro", "Scuro"], self._set_theme, height=30)
-        self.theme.set("Scuro" if ctk.get_appearance_mode() == "Dark" else "Chiaro")
+        bottom.grid(row=8, column=0, sticky="ew", padx=14, pady=(0, 10))
+        self.theme = segmented(bottom, list(THEMES), self._set_theme, height=30, size=12)
+        self.theme.set(self.settings.get("theme"))
         self.theme.pack(fill="x")
+        for name, b in self.theme._buttons_dict.items():
+            Tooltip(b, {"Sistema": "Segue il tema di Windows"}.get(name, f"Tema {name.lower()}"))
         button(bottom, "Apri registro attività", "file", "ghost", lambda: open_in_explorer(data_dir()),
                height=32).pack(fill="x", pady=(8, 0))
 
+        self._foot: dict[str, ctk.CTkButton] = {}
+        collapsed = self._collapse_pref
+        for i, (key, text, ic, cmd, tip) in enumerate((
+                ("about", "Informazioni", "info", self.show_about, "Informazioni (F1)"),
+                ("collapse", "Espandi barra" if collapsed else "Comprimi barra", "menu", self._toggle_collapse,
+                 lambda: ("Espandi" if self._collapse_pref else "Comprimi") + " la barra laterale (Ctrl+B)"))):
+            b = ctk.CTkButton(sb, text=f"  {text}", image=icon(ic, size=18), compound="left", anchor="w", height=38,
+                              corner_radius=10, font=(FONT, 13), fg_color="transparent", text_color=TEXT,
+                              hover_color=HOVER, command=cmd, width=192)
+            b.grid(row=9 + i, column=0, sticky="ew", padx=14, pady=(0, 3 if i == 0 else 14))
+            self._foot[key] = b
+            self._nav_text[key] = f"  {text}"
+            Tooltip(b, tip)
+
     def _set_theme(self, value):
-        ctk.set_appearance_mode("dark" if value == "Scuro" else "light")
-        ui.style_trees(self)
+        self.settings.set("theme", value)
+        self._apply_theme(force=True)
+
+    def _apply_theme(self, force: bool = False):
+        """Applica la preferenza (Chiaro / Scuro / Sistema); con «Sistema» segue il tema di Windows."""
+        pref = self.settings.get("theme")
+        mode = resolve_mode(pref)
+        if force or ctk.get_appearance_mode().lower() != mode:
+            ctk.set_appearance_mode(mode)
+            ui.style_trees(self)
+
+    def _poll_system_theme(self):
+        if self.settings.get("theme") == "Sistema":
+            self._apply_theme()
+        self.after(2500, self._poll_system_theme)
 
     def _elevate(self):
+        self._save_window()
         if relaunch_as_admin():
             self.destroy()
 
@@ -199,7 +333,9 @@ class App(ctk.CTk):
             b.configure(fg_color=NAV_SEL if selected else "transparent",
                         text_color=NAV_SEL_TEXT if selected else TEXT)
         self._current = key
+        self.settings.set("page", key)
         page.on_show()
+        ui.a11y_pass(self)
         return page
 
 
@@ -226,6 +362,12 @@ class Page(ctk.CTkFrame):
 
     def on_show(self):
         pass
+
+    def refresh(self) -> None:
+        """F5: rifà l'azione principale della pagina (analizza o aggiorna)."""
+
+    def cancel(self) -> None:
+        """Esc: annulla l'operazione in corso, se c'è."""
 
 
 def _card_title(parent, text: str, ic: str) -> None:
@@ -300,20 +442,28 @@ class HomePage(Page):
         label(self.drives, "Dischi", size=16, bold=True).grid(row=0, column=0, columnspan=3, sticky="w",
                                                               padx=20, pady=(16, 8))
         self.drives.grid_columnconfigure(1, weight=1)
-        for i, d in enumerate(list_drives(), start=1):
+        drives = list_drives()
+        for i, d in enumerate(drives, start=1):
+            last = i == len(drives)
             frac = d["used"] / d["total"] if d["total"] else 0
-            color = DANGER if frac > 0.9 else WARN if frac > 0.75 else ACCENT
+            color = BAR_DANGER if frac > 0.9 else BAR_WARN if frac > 0.75 else BAR_OK
+            pady = (6, 20 if last else 6)   # l'ultima riga ha più spazio sotto: non resta a ridosso del bordo
             label(self.drives, f"{d['root'][:2]}  {d['label']}", bold=True).grid(
-                row=i, column=0, sticky="w", padx=(20, 12), pady=6)
+                row=i, column=0, sticky="w", padx=(20, 12), pady=pady)
             pb = ctk.CTkProgressBar(self.drives, height=10, corner_radius=5, progress_color=color, fg_color=HOVER)
             pb.set(frac)
-            pb.grid(row=i, column=1, sticky="ew", padx=8)
+            pb.grid(row=i, column=1, sticky="ew", padx=8, pady=pady)
             label(self.drives, f"{fmt_size(d['free'])} liberi di {fmt_size(d['total'])}", muted=True).grid(
-                row=i, column=2, sticky="e", padx=(8, 20))
-        ctk.CTkFrame(self.drives, height=6, fg_color="transparent").grid(row=99, column=0)
+                row=i, column=2, sticky="e", padx=(8, 20), pady=pady)
+        if not drives:
+            label(self.drives, "Nessun disco trovato.", muted=True).grid(row=1, column=0, columnspan=3, sticky="w",
+                                                                         padx=20, pady=(0, 20))
         size, n = recycle_bin_info()
         self.rb_lbl.configure(text=f"{n} elementi · {fmt_size(size)}" if n else "Il cestino è vuoto.")
         self.rb_btn.configure(state="normal" if n else "disabled")
+
+    def refresh(self):
+        self.on_show()
 
     def _quick_clean(self):
         self.app.show("clean").scan()
@@ -359,10 +509,14 @@ class CleanPage(Page):
         inner.pack(fill="x", padx=16, pady=14)
         self.scan_btn = button(inner, "Analizza", "search", "primary", self.scan, width=140)
         self.scan_btn.pack(side="left")
+        Tooltip(self.scan_btn, "Analizza il PC (F5)")
         self.clean_btn = button(inner, "Pulisci selezionati", "clean", "danger", self.clean, width=200,
                                 state="disabled")
         self.clean_btn.pack(side="left", padx=10)
+        Tooltip(self.clean_btn, lambda: "" if str(self.clean_btn.cget("state")) == "normal" else
+                ("Operazione in corso" if self.busy else "Prima premi «Analizza» e scegli cosa pulire"))
         self.cancel_btn = button(inner, "Annulla", "stop", "secondary", self._cancel, width=110)
+        Tooltip(self.cancel_btn, "Annulla (Esc)")
         self.preset = segmented(inner, ["Consigliati", "Tutti", "Nessuno"], self._preset, height=34)
         self.preset.set("Consigliati")
         self.preset.pack(side="right")
@@ -378,7 +532,14 @@ class CleanPage(Page):
         foot.grid(row=3, column=0, sticky="ew", pady=(12, 0))
         self.status = label(foot, "Premi «Analizza» per vedere quanto spazio puoi recuperare.", muted=True)
         self.status.pack(side="left")
-        self.progress = ctk.CTkProgressBar(self, height=6, mode="indeterminate")
+        self.progress = ctk.CTkProgressBar(self, height=6, mode="determinate")   # il totale e' noto: progresso reale
+
+    def refresh(self):
+        self.scan()
+
+    def cancel(self):
+        if self.busy:
+            self._cancel()
 
     def _build_cards(self):
         groups: dict[str, list[cleaner.Category]] = {}
@@ -464,16 +625,18 @@ class CleanPage(Page):
         if busy:
             self.clean_btn.configure(state="disabled")
             self.cancel_btn.pack(side="left", padx=10)
+            self.progress.configure(mode="determinate")
+            self.progress.set(0)
             self.progress.grid(row=4, column=0, sticky="ew", pady=(8, 0))
-            self.progress.start()
         else:
-            self.cancel_btn.pack_forget()
+            ui.hide(self.cancel_btn)
             self.progress.stop()
             self.progress.grid_forget()
             self._update_total()
 
     def _cancel(self):
         self.cancel_flag = True
+        self.status.configure(text="Annullamento in corso…")
 
     # ------------------------------------------------------------ scansione
     def scan(self):
@@ -489,10 +652,11 @@ class CleanPage(Page):
         def work():
             procs = running_processes()
             out = {}
-            for c in cats:
+            for i, c in enumerate(cats):
                 if self.cancel_flag:
                     break
-                self.app.set_text(self.status, f"Analizzo: {c.name}…")
+                self.app.set_text(self.status, f"Analizzo: {c.name} ({i + 1} di {len(cats)})…")
+                self.app.ui(self.progress.set, i / len(cats))
                 if c.admin and not self.admin:
                     out[c.id] = None
                     continue
@@ -514,7 +678,8 @@ class CleanPage(Page):
             self._set_busy(False)
 
         self.app.set_text(self.status, "Analisi in corso…")
-        self.app.run_bg(work, done, lambda e: (self._set_busy(False), messagebox.showerror(APP_NAME, str(e))))
+        self.app.run_bg(work, done, lambda e: (self._set_busy(False), self.app.error_box(
+            "Non è stato possibile analizzare il PC.", e)))
 
     def _show_result(self, cid: str, res: cleaner.ScanResult):
         self.size_lbls[cid].configure(text=fmt_size(res.size) if res.size else "0",
@@ -538,10 +703,11 @@ class CleanPage(Page):
 
         def work():
             freed = deleted = skipped = 0
-            for r in sel:
+            for i, r in enumerate(sel):
                 if self.cancel_flag:
                     break
-                self.app.set_text(self.status, f"Pulisco: {r.cat.name}…")
+                self.app.set_text(self.status, f"Pulisco: {r.cat.name} ({i + 1} di {len(sel)})…")
+                self.app.ui(self.progress.set, i / len(sel))
                 f, d, s = cleaner.clean_result(r, cancel=lambda: self.cancel_flag)
                 freed += f
                 deleted += d
@@ -557,7 +723,8 @@ class CleanPage(Page):
             messagebox.showinfo(APP_NAME, msg)
             self.scan()
 
-        self.app.run_bg(work, done, lambda e: (self._set_busy(False), messagebox.showerror(APP_NAME, str(e))))
+        self.app.run_bg(work, done, lambda e: (self._set_busy(False), self.app.error_box(
+            "La pulizia non è andata a buon fine.", e)))
 
 
 # =====================================================================================
@@ -586,7 +753,9 @@ class SpacePage(Page):
         self.target.pack(side="left")
         self.go_btn = button(inner, "Analizza", "search", "primary", self.start, width=130)
         self.go_btn.pack(side="left", padx=10)
+        Tooltip(self.go_btn, "Analizza il disco o la cartella scelti (F5)")
         self.cancel_btn = button(inner, "Annulla", "stop", "secondary", self._cancel, width=110)
+        Tooltip(self.cancel_btn, "Annulla (Esc)")
         self.filter_btn = button(inner, "Filtri", "filter", "secondary", self._toggle_filters, width=150)
         self.filter_btn.pack(side="right")
         self.view = segmented(inner, ["Cartelle", "File più grandi"], self._view_changed, height=36)
@@ -609,12 +778,13 @@ class SpacePage(Page):
         holder.grid_columnconfigure(0, weight=1)
         holder.grid_rowconfigure(0, weight=1)
         self.dir_tree = make_tree(holder, [("name", "Nome", 380, "w"), ("type", "Tipo", 120, "w"),
-                                           ("size", "Dimensione", 110, "e"), ("pct", "Quota", 210, "w"),
+                                           ("size", "Dimensione", 110, "e"), ("pct", "Quota", 100, "e"),
                                            ("date", "Modificato", 120, "w")])
         self.big_tree = make_tree(holder, [("name", "Nome", 300, "w"), ("type", "Tipo", 100, "w"),
                                            ("size", "Dimensione", 110, "e"), ("folder", "Cartella", 330, "w"),
                                            ("date", "Modificato", 120, "w")])
         self.dir_tree.frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        self.empty = EmptyState(holder, "analyze")
         self.dir_tree.bind("<Double-1>", self._open_item)
         self.dir_tree.bind("<Return>", self._open_item)
         self.dir_tree.bind("<BackSpace>", lambda e: self._up())
@@ -629,6 +799,8 @@ class SpacePage(Page):
         self.status.pack(side="left", fill="x", expand=True)
         button(foot, "Sposta nel cestino", "trash", "danger", self._trash, width=190).pack(side="right")
         button(foot, "Apri in Esplora file", "open", "secondary", self._reveal, width=190).pack(side="right", padx=10)
+        self.progress = ctk.CTkProgressBar(self, height=6, mode="indeterminate")   # totale ignoto: barra indeterminata
+        self._update_empty()
 
         self.menu = tk.Menu(self, tearoff=0)
         self.menu.add_command(label="Apri in Esplora file", command=self._reveal)
@@ -644,13 +816,46 @@ class SpacePage(Page):
         home = env("USERPROFILE")
         if home:
             self._targets[f"Cartella utente  ({os.path.basename(home)})"] = home
+        saved = self.app.settings.get("space_target") or ""
+        saved_key = next((k for k, v in self._targets.items()
+                          if v and saved and os.path.normcase(v) == os.path.normcase(saved)), None)
+        if saved and saved_key is None and os.path.isdir(saved):   # cartella scelta in una sessione precedente
+            saved_key = os.path.normpath(saved)
+            self._targets = {saved_key: saved, **self._targets}
         self._targets["Scegli cartella…"] = ""
         cur = self.target.get()
         self.target.configure(values=list(self._targets))
         if cur not in self._targets:
-            self.target.set(next(iter(self._targets)))
+            self.target.set(saved_key or next(iter(self._targets)))
+
+    def refresh(self):
+        self.start()
+
+    def cancel(self):
+        if self.busy:
+            self._cancel()
+
+    def _update_empty(self):
+        """Messaggio al posto della tabella quando non c'e' nulla da mostrare."""
+        if self.busy:
+            self.empty.show("Analisi in corso…", "Sto leggendo file e cartelle: può richiedere qualche minuto. "
+                            "Puoi annullare in qualsiasi momento con Esc.")
+        elif not self.result:
+            self.empty.show("Nessuna analisi ancora", "Scegli un disco o una cartella in alto e premi «Analizza» (F5) "
+                            "per scoprire cosa occupa più spazio.", "Analizza", self.start, action_icon="search")
+        elif not self._active_tree().get_children():
+            if self.filter_bar.filters().active:
+                self.empty.show("Nessun elemento corrisponde ai filtri", "Prova a cambiare i filtri oppure azzerali "
+                                "per vedere di nuovo tutto.", "Azzera filtri", self.filter_bar.reset,
+                                action_icon="cancel")
+            else:
+                self.empty.show("Niente da mostrare qui", "Questa cartella è vuota o non è accessibile.", ic="info")
+        else:
+            self.empty.hide()
 
     def _target_changed(self, value):
+        if self._targets.get(value):
+            self.app.settings.set("space_target", self._targets[value])
         if self._targets.get(value) == "":
             path = filedialog.askdirectory(title="Scegli la cartella da analizzare")
             if path:
@@ -658,6 +863,7 @@ class SpacePage(Page):
                 self._targets = {label_: label_, **self._targets}
                 self.target.configure(values=list(self._targets))
                 self.target.set(label_)
+                self.app.settings.set("space_target", label_)
             else:
                 self.target.set(next(iter(self._targets)))
 
@@ -687,10 +893,14 @@ class SpacePage(Page):
             return
         self.busy = True
         self.cancel_flag = False
+        self.app.settings.set("space_target", root)
         self.go_btn.configure(state="disabled")
         self.cancel_btn.pack(side="left", padx=10)
         for t in (self.dir_tree, self.big_tree):
             t.delete(*t.get_children())
+        self.progress.grid(row=6, column=0, sticky="ew", pady=(8, 0))
+        self.progress.start()
+        self._update_empty()
 
         def prog(path, n):
             shown = path if len(path) < 70 else "…" + path[-68:]
@@ -699,7 +909,10 @@ class SpacePage(Page):
         def finish():
             self.busy = False
             self.go_btn.configure(state="normal")
-            self.cancel_btn.pack_forget()
+            ui.hide(self.cancel_btn)
+            self.progress.stop()
+            self.progress.grid_forget()
+            self._update_empty()
 
         def done(res):
             finish()
@@ -715,7 +928,8 @@ class SpacePage(Page):
 
         def err(e):
             finish()
-            messagebox.showerror(APP_NAME, str(e))
+            self.status.configure(text="Analisi non riuscita.")
+            self.app.error_box("Non è stato possibile analizzare questo percorso.", e)
 
         self.app.run_bg(lambda: analyzer.analyze(root, prog, lambda: self.cancel_flag), done, err)
 
@@ -728,6 +942,7 @@ class SpacePage(Page):
             self.dir_tree.frame.grid_remove()
             self.big_tree.frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         self._render()
+        self._update_empty()
 
     def _open_node(self, node: analyzer.DirNode):
         self.current = node
@@ -739,12 +954,14 @@ class SpacePage(Page):
     def _render(self):
         """Ridisegna la vista attuale applicando filtri e ordinamento (senza rileggere il disco)."""
         if not self.result:
+            self._update_empty()
             return
         self._update_filter_btn()
         if self.view.get() == "Cartelle":
             self._render_dir()
         else:
             self._render_big()
+        self._update_empty()
 
     def _render_dir(self):
         flt = self.filter_bar.filters()
@@ -758,7 +975,7 @@ class SpacePage(Page):
             kind = "Cartella" if e["dir"] else (os.path.splitext(e["name"])[1][1:].upper() or "File")
             name = e["name"] + ("  (accesso negato)" if e["denied"] else "")
             t.insert("", "end", iid=e["path"],
-                     values=(name, kind, fmt_size(e["size"]), bar_text(e["size"] / total),
+                     values=(name, kind, fmt_size(e["size"]), pct_text(e["size"] / total),
                              dt.datetime.fromtimestamp(e["mtime"]).strftime("%d/%m/%Y")),
                      tags=("muted",) if e["denied"] else ())
         self.info_lbl.configure(text=f"{len(shown)} di {len(self.entries)} elementi")
@@ -865,7 +1082,8 @@ class SpacePage(Page):
                     ok.append((p, s, is_dir))
                     log(f"Spostato nel cestino: {p} ({s} byte)")
                 except Exception as ex:
-                    failed.append(f"{p}: {ex}")
+                    log(f"Errore cestino {p}: {ex!r}")
+                    failed.append(f"{os.path.basename(p)}: {explain_error(ex)}")
             return ok, failed
 
         def done(res):
@@ -897,6 +1115,7 @@ class DupPage(Page):
         self.checked: set[str] = set()
         self.cancel_flag = False
         self.busy = False
+        self.searched = False   # almeno una ricerca completata
         self._filters_open = False
 
         self.grid_columnconfigure(0, weight=1)
@@ -939,9 +1158,11 @@ class DupPage(Page):
         bar.grid(row=2, column=0, sticky="ew", pady=(0, 10))
         self.go_btn = button(bar, "Cerca duplicati", "search", "primary", self.start, width=170)
         self.go_btn.pack(side="left")
+        Tooltip(self.go_btn, "Cerca i file duplicati nelle cartelle scelte (F5)")
         self.filter_btn = button(bar, "Filtri", "filter", "secondary", self._toggle_filters, width=130)
         self.filter_btn.pack(side="left", padx=10)
         self.cancel_btn = button(bar, "Annulla", "stop", "secondary", self._cancel, width=110)
+        Tooltip(self.cancel_btn, "Annulla (Esc)")
         for text, cmd in (("Deseleziona tutto", self._clear), ("Tieni il più recente", lambda: self._auto(True)),
                           ("Tieni il più vecchio", lambda: self._auto(False))):
             button(bar, text, None, "secondary", cmd, width=170).pack(side="right", padx=(8, 0))
@@ -955,18 +1176,48 @@ class DupPage(Page):
                                        ("folder", "Cartella", 400, "w"), ("date", "Modificato", 140, "w")],
                               show_tree=True)
         self.tree.frame.pack(fill="both", expand=True, padx=10, pady=10)
+        self.empty = EmptyState(holder, "copy")
         self.tree.bind("<Button-1>", self._click)
         self.tree.bind("<space>", self._toggle_focus)
         self.tree.bind("<Double-1>", lambda e: self._reveal())
 
         foot = FlowBar(self)
         foot.grid(row=5, column=0, sticky="ew", pady=(12, 0))
-        self.status = label(foot, "Clicca la casella ☐ accanto a un file per selezionarlo.", muted=True)
+        self.status = label(foot, "Clicca la casella a sinistra di un file per selezionarlo.", muted=True)
         self.status.pack(side="left", fill="x", expand=True)
         self.trash_btn = button(foot, "Sposta selezionati nel cestino", "trash", "danger", self._trash, width=270,
                                 state="disabled")
         self.trash_btn.pack(side="right")
+        Tooltip(self.trash_btn, lambda: "" if str(self.trash_btn.cget("state")) == "normal" else
+                "Prima seleziona i file da spostare nel cestino")
         button(foot, "Apri posizione", "open", "secondary", self._reveal, width=160).pack(side="right", padx=10)
+        self.progress = ctk.CTkProgressBar(self, height=6, mode="indeterminate")   # totale ignoto: barra indeterminata
+        self._update_empty()
+
+    def refresh(self):
+        self.start()
+
+    def cancel(self):
+        if self.busy:
+            self._cancel()
+
+    def _update_empty(self):
+        """Messaggio al posto della tabella quando non c'e' nulla da mostrare."""
+        if self.busy:
+            self.empty.show("Ricerca in corso…", "Sto confrontando i file delle cartelle scelte: può richiedere "
+                            "qualche minuto. Puoi annullare con Esc.")
+        elif not self.searched:
+            self.empty.show("Nessuna ricerca ancora", "Scegli le cartelle qui sopra e premi «Cerca duplicati» (F5): "
+                            "trovo i file identici anche con nomi diversi.", "Cerca duplicati", self.start,
+                            action_icon="search")
+        elif not self.all_groups:
+            self.empty.show("Nessun duplicato trovato", "Nelle cartelle scelte non ci sono file identici. Se vuoi, "
+                            "abbassa la dimensione minima nei filtri e cerca di nuovo.", ic="check")
+        elif not self.groups:
+            self.empty.show("Nessun gruppo corrisponde ai filtri", "Prova a cambiare i filtri oppure azzerali.",
+                            "Azzera filtri", self.filter_bar.reset, action_icon="cancel")
+        else:
+            self.empty.hide()
 
     def _grip_start(self, event):
         self._grip_y = event.y_root
@@ -1035,20 +1286,28 @@ class DupPage(Page):
         self.cancel_btn.pack(side="left", padx=10)
         self.tree.delete(*self.tree.get_children())
         self.checked.clear()
+        self.progress.grid(row=6, column=0, sticky="ew", pady=(8, 0))
+        self.progress.start()
+        self._update_empty()
 
         def done(groups):
             self.busy = False
             self.go_btn.configure(state="normal")
-            self.cancel_btn.pack_forget()
+            ui.hide(self.cancel_btn)
+            self.progress.stop()
+            self.progress.grid_forget()
             if groups is None:
                 self.status.configure(text="Ricerca annullata.")
+                self._update_empty()
                 return
+            self.searched = True
             self.all_groups = groups
             self._apply_filter()
 
         def err(e):
             done(None)
-            messagebox.showerror(APP_NAME, str(e))
+            self.status.configure(text="Ricerca non riuscita.")
+            self.app.error_box("Non è stato possibile cercare i duplicati.", e)
 
         self.app.run_bg(lambda: duplicates.find_duplicates(
             roots, Filters(min_size=min_size), lambda m: self.app.set_text(self.status, m), lambda: self.cancel_flag),
@@ -1073,11 +1332,11 @@ class DupPage(Page):
         shown = self.groups[:self.MAX_GROUPS]
         for gi, g in enumerate(shown):
             gid = f"g{gi}"
-            t.insert("", "end", iid=gid, text="☐", open=True, tags=("group",),
+            t.insert("", "end", iid=gid, image=ui.table_image("off"), open=True, tags=("group",),
                      values=(f"{len(g.files)} copie identiche", fmt_size(g.size),
                              f"{fmt_size(g.wasted)} recuperabili", ""))
             for path, mtime in sorted(g.files, key=lambda f: f[1]):
-                t.insert(gid, "end", iid=path, text="☑" if path in self.checked else "☐",
+                t.insert(gid, "end", iid=path, image=ui.table_image("on" if path in self.checked else "off"),
                          values=(os.path.basename(path), fmt_size(g.size), os.path.dirname(path),
                                  dt.datetime.fromtimestamp(mtime).strftime("%d/%m/%Y %H:%M")))
             self._refresh_group(gid)
@@ -1091,6 +1350,7 @@ class DupPage(Page):
             text = f"{len(self.groups)} gruppi di duplicati{more}: {fmt_size(wasted)} recuperabili."
         self.status.configure(text=text)
         self._update_status()
+        self._update_empty()
 
     def _group_of(self, path):
         parent = self.tree.parent(path)
@@ -1101,7 +1361,7 @@ class DupPage(Page):
             self.checked.add(path)
         else:
             self.checked.discard(path)
-        self.tree.item(path, text="☑" if on else "☐")
+        self.tree.item(path, image=ui.table_image("on" if on else "off"))
         parent = self.tree.parent(path)
         if parent:
             self._refresh_group(parent)
@@ -1109,7 +1369,7 @@ class DupPage(Page):
     def _refresh_group(self, gid: str):
         kids = self.tree.get_children(gid)
         n = sum(1 for k in kids if k in self.checked)
-        self.tree.item(gid, text="☑" if kids and n == len(kids) else ("◪" if n else "☐"))
+        self.tree.item(gid, image=ui.table_image("on" if kids and n == len(kids) else ("part" if n else "off")))
 
     def _toggle_row(self, row: str):
         if self.tree.parent(row):
@@ -1188,7 +1448,8 @@ class DupPage(Page):
                     ok.append(p)
                     log(f"Duplicato nel cestino: {p}")
                 except Exception as ex:
-                    failed.append(f"{p}: {ex}")
+                    log(f"Errore cestino {p}: {ex!r}")
+                    failed.append(f"{os.path.basename(p)}: {explain_error(ex)}")
             return ok, failed
 
         def done(res):
@@ -1224,13 +1485,18 @@ class StartupPage(Page):
         button(inner, "Disattiva", "power", "danger", lambda: self._set(False), width=140).pack(side="left")
         button(inner, "Attiva", "check", "primary", lambda: self._set(True), width=140).pack(side="left", padx=10)
         button(inner, "Apri posizione", "open", "secondary", self._reveal, width=160).pack(side="left")
-        button(inner, "Aggiorna", "refresh", "ghost", self.on_show, width=130).pack(side="right")
+        refresh_btn = button(inner, "Aggiorna", "refresh", "ghost", self.on_show, width=130)
+        refresh_btn.pack(side="right")
+        Tooltip(refresh_btn, "Rilegge l'elenco dei programmi (F5)")
 
         holder = Card(self)
         holder.grid(row=2, column=0, sticky="nsew")
         self.tree = make_tree(holder, [("name", "Nome", 200, "w"), ("state", "Stato", 120, "w"),
-                                       ("source", "Origine", 230, "w"), ("cmd", "Comando", 370, "w")])
+                                       ("source", "Origine", 230, "w"), ("cmd", "Comando", 370, "w")],
+                              show_tree=True)   # la colonna iniziale mostra un pallino verde/grigio
+        self.tree.column("#0", width=int(44 * ui.SCALE), stretch=False, anchor="center")
         self.tree.frame.pack(fill="both", expand=True, padx=10, pady=10)
+        self.empty = EmptyState(holder, "power")
         self.tree.tag_configure("off", foreground="#667085")
         self.status = label(self, "", muted=True)
         self.status.grid(row=3, column=0, sticky="w", pady=(10, 0))
@@ -1243,10 +1509,20 @@ class StartupPage(Page):
             iid = f"i{i}"
             self.items[iid] = it
             t.insert("", "end", iid=iid, tags=() if it.enabled else ("off",),
-                     values=(it.name, "● Attivo" if it.enabled else "○ Disattivato", it.source, it.command))
+                     image=ui.table_image("dot_on" if it.enabled else "dot_off"),
+                     values=(it.name, "Attivo" if it.enabled else "Disattivato", it.source, it.command))
+        if self.items:
+            self.empty.hide()
+        else:
+            self.empty.show("Nessun programma in avvio automatico", "Non ho trovato programmi che partono con "
+                            "Windows, oppure Windows non ha permesso di leggerli. Premi «Aggiorna» per riprovare.",
+                            "Aggiorna", self.on_show, action_icon="refresh")
         on = sum(1 for i in self.items.values() if i.enabled)
         self.status.configure(text=f"{len(self.items)} programmi, {on} attivi."
                               + ("" if is_admin() else "  Quelli «tutti gli utenti» richiedono l'amministratore."))
+
+    def refresh(self):
+        self.on_show()
 
     def _set(self, enabled: bool):
         sel = self.tree.selection()
@@ -1260,7 +1536,8 @@ class StartupPage(Page):
             except PermissionError:
                 denied.append(it.name)
             except OSError as ex:
-                denied.append(f"{it.name} ({ex})")
+                log(f"Errore avvio automatico {it.name}: {ex!r}")
+                denied.append(f"{it.name} ({explain_error(ex)})")
         self.on_show()
         if denied:
             messagebox.showwarning(APP_NAME, "Servono i diritti di amministratore per:\n\n" + "\n".join(denied))
@@ -1283,7 +1560,15 @@ class StartupPage(Page):
                                           "programma disinstallato: puoi disattivarlo.")
 
 
+def resolve_mode(pref: str) -> str:
+    """Preferenza del tema (Chiaro / Scuro / Sistema) -> modalità di CustomTkinter."""
+    if pref == "Chiaro" or (pref == "Sistema" and system_prefers_light()):
+        return "light"
+    return "dark"
+
+
 def main():
-    ctk.set_appearance_mode("dark")
+    settings = Settings()
+    ctk.set_appearance_mode(resolve_mode(settings.get("theme")))
     ctk.set_default_color_theme("green")
-    App().mainloop()
+    App(settings).mainloop()

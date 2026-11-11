@@ -11,7 +11,8 @@ import sys
 from ctypes import wintypes
 
 APP_NAME = "PC Cleaner"
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.2.0"
+APP_SITE = "https://github.com/Cesa028/pc-cleaner"
 
 
 def fmt_size(n: float) -> str:
@@ -161,3 +162,35 @@ def log(msg: str) -> None:
             f.write(f"[{_dt.datetime.now():%Y-%m-%d %H:%M:%S}] {msg}\n")
     except OSError:
         pass
+
+
+# ---------------------------------------------------------------- tema di Windows
+def system_prefers_light() -> bool:
+    """True se Windows usa il tema chiaro per le app (registro: AppsUseLightTheme). In caso di dubbio: chiaro."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as k:
+            return bool(winreg.QueryValueEx(k, "AppsUseLightTheme")[0])
+    except Exception:
+        return True
+
+
+# ---------------------------------------------------------------- errori comprensibili
+def explain_error(ex: BaseException) -> str:
+    """Spiega un errore in italiano semplice (il dettaglio tecnico va nel registro, non all'utente)."""
+    code = getattr(ex, "winerror", None)
+    if isinstance(ex, PermissionError) or code == 5:
+        return ("Windows ha negato l'accesso. Chiudi i programmi che usano questi file "
+                "oppure riavvia PC Cleaner come amministratore.")
+    if code in (32, 33):
+        return "Il file è in uso da un altro programma. Chiudilo e riprova."
+    if isinstance(ex, FileNotFoundError):
+        return "Il file o la cartella non esiste più: potrebbe essere stato spostato o eliminato."
+    if code == 112 or getattr(ex, "errno", None) == 28:
+        return "Lo spazio sul disco è esaurito."
+    if isinstance(ex, MemoryError):
+        return "La memoria del computer non è bastata per completare l'operazione."
+    if isinstance(ex, OSError):
+        return "Windows non ha permesso l'operazione sul disco o sulla cartella."
+    return "Si è verificato un problema imprevisto."

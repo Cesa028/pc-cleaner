@@ -1,6 +1,6 @@
 # PC Cleaner — Documentazione
 
-Versione 1.0.0 · Windows 10/11 a 64 bit · Python 3.13 + customtkinter
+Versione 1.2.0 · Windows 10/11 a 64 bit · Python 3.13 + customtkinter
 
 ---
 
@@ -80,7 +80,9 @@ PulisciPC/
 │  ├─ filters.py        filtri (nome, estensione, tipo, data, dimensione) e ordinamento, usati da analisi e duplicati
 │  ├─ duplicates.py     ricerca duplicati a 3 livelli di hash
 │  ├─ startup.py        lettura e scrittura dell'avvio automatico (registro + cartelle)
-│  ├─ ui.py             colori, icone, pulsanti, tabelle e barra dei filtri condivisi
+│  ├─ ui.py             colori, icone, pulsanti, tabelle, barra dei filtri, tooltip, focus da tastiera, stati vuoti
+│  ├─ settings.py       impostazioni persistenti (tema, finestra, ultima pagina e disco) in JSON, scrittura atomica
+│  ├─ dialogs.py        finestra Informazioni (F1) e visualizzatore di licenza e componenti di terze parti
 │  └─ app.py            finestra, barra laterale e una classe per pagina (creata al primo utilizzo)
 ├─ assets/              logo (icon.png/icon.ico) e icone dell'interfaccia (icons/)
 ├─ make_icon.py         genera assets/icon.ico (solo in fase di build)
@@ -95,6 +97,9 @@ Punti chiave:
 - **Filtri.** Un solo oggetto `Filters` (in `filters.py`) decide cosa mostrare o analizzare; la stessa barra (`ui.FilterBar`) è usata in Analisi spazio e Duplicati.
 - **Annullamento.** Ogni operazione lunga riceve una funzione `cancel()` che controlla un flag impostato dal pulsante «Annulla».
 - **Aggiungere una categoria di pulizia.** Basta aggiungere un `Category(...)` in `cleaner.build_categories()`. I campi `targets` (funzione che restituisce le cartelle o i pattern), `admin`, `default`, `min_age_h` e `procs` coprono tutti i casi attuali.
+- **Impostazioni.** `settings.Settings` legge e scrive `%LOCALAPPDATA%\PC Cleaner\impostazioni.json` (scrittura atomica, errori ignorati). Salva tema, finestra, barra laterale, ultima pagina e ultimo disco di Analisi spazio.
+- **Tastiera.** Ctrl+1…5 (pagine), F5 (analizza/aggiorna), Esc (annulla), Ctrl+B (barra laterale), F1 (Informazioni). `ui.a11y_pass` rende ogni pulsante CustomTkinter raggiungibile con Tab, con anello di focus e attivazione con Spazio/Invio.
+- **Simboli nelle tabelle.** Le caselle di selezione dei duplicati e i pallini dello stato dell'avvio automatico sono immagini disegnate con Pillow (`ui.table_image`), non caratteri Unicode. Restano solo i segni tipografici nei testi (… · — •).
 - **Registro.** Ogni eliminazione, spostamento nel cestino e modifica dell'avvio viene scritta in `%LOCALAPPDATA%\PC Cleaner\registro.txt`.
 ### Ricompilare
 Fai doppio clic su `build.bat`. Se manca, crea il `.venv` e installa `customtkinter`, `send2trash`, `pillow` e `pyinstaller`. Il risultato è `dist\PCCleaner.exe`. Le icone dell'interfaccia sono già in `assets\icons`; si rigenerano con `make_icons.py` solo se cambi i glifi.
@@ -129,7 +134,7 @@ Ordinate per importanza.
 
 ### 4.4 Interfaccia
 17. **DPI.** La scala delle tabelle (altezza righe, larghezza colonne) viene calcolata una volta all'avvio. Se sposti la finestra su un monitor con DPI diverso, le tabelle non si adattano.
-18. **Tema.** La scelta chiaro/scuro non viene salvata e manca un file di impostazioni. Al cambio di tema le tabelle `ttk` vengono ricolorate a mano: va verificato che non restino colori sbagliati.
+18. **Tema.** Risolto dalla 1.2.0: scelta Chiaro / Scuro / Sistema salvata in `impostazioni.json` e riletta all'avvio; con «Sistema» il tema di Windows (chiave `AppsUseLightTheme`) viene riletto ogni 2,5 secondi. Le tabelle `ttk` vengono ricolorate a mano al cambio.
 19. **Elenco cartelle dei duplicati.** È un campo di testo libero: i percorsi inesistenti vengono ignorati senza avviso.
 20. **Icone.** Risolto: le emoji sono sostituite da icone PNG monocromatiche (`assets/icons`), generate dal font di sistema Segoe MDL2 Assets.
 21. **Lingua.** Solo italiano, con testi scritti direttamente nel codice.

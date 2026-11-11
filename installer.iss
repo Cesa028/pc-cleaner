@@ -2,7 +2,7 @@
 ; Compilare con build_installer.bat (prima crea dist\PCCleaner\ con PyInstaller)
 
 #define AppName "PC Cleaner"
-#define AppVersion "1.1.2"
+#define AppVersion "1.2.0"
 #define AppExe "PCCleaner.exe"
 
 [Setup]

@@ -18,7 +18,7 @@ GLYPHS = {
     "search": 0xE721, "filter": 0xE71C, "trash": 0xE74D, "shield": 0xE83D, "refresh": 0xE72C,
     "check": 0xE73E, "cancel": 0xE711, "up": 0xE74A, "settings": 0xE713, "down": 0xE70D,
     "sun": 0xE706, "moon": 0xE708, "stop": 0xE71A, "open": 0xE8A7, "file": 0xE8A5,
-    "info": 0xE946, "warn": 0xE7BA, "lock": 0xE72E, "add": 0xE710,
+    "info": 0xE946, "menu": 0xE700, "warn": 0xE7BA, "lock": 0xE72E, "add": 0xE710,
 }
 COLORS = {"l": (27, 31, 38, 255), "d": (238, 241, 246, 255), "w": (255, 255, 255, 255)}
 SIZE = 64  # px: l'app la ridimensiona

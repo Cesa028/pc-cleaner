@@ -24,7 +24,7 @@ PC Cleaner (nel progetto: *PulisciPC*) ti aiuta a recuperare spazio su Windows 1
 
 ## Download
 
-L'installer per Windows è nella sezione **[Releases](../../releases/latest)**: scarica `PCCleaner-Setup-1.1.2.exe` ed eseguilo.
+L'installer per Windows è nella sezione **[Releases](../../releases/latest)**: scarica `PCCleaner-Setup-1.2.0.exe` ed eseguilo.
 
 ## Funzionalità
 
@@ -40,6 +40,27 @@ L'installer per Windows è nella sezione **[Releases](../../releases/latest)**: 
 - **Duplicati**: confronto per contenuto tramite hash (BLAKE2b) in tre passaggi progressivi; almeno una copia di ogni file resta sempre al suo posto.
 - **Avvio automatico**: elenco dei programmi che partono con Windows, con attivazione e disattivazione reversibili, come in Gestione attività.
 - **Riavvio come amministratore** con un clic, per sbloccare le pulizie delle cartelle di sistema.
+
+### Novità della versione 1.2.0
+
+- **Tema Chiaro / Scuro / Sistema**: di default segue il tema di Windows (anche mentre l'app è aperta); la scelta è salvata.
+- **Impostazioni persistenti** in `%LOCALAPPDATA%\PC Cleaner\impostazioni.json`: tema, dimensione e posizione della finestra (ripristinata dentro lo schermo), barra laterale compressa, ultima pagina e ultimo disco analizzato.
+- **Contrasto WCAG AA** (almeno 4,5:1) per tutti i testi, anche sui pulsanti verdi e rossi (verifica con `contrast_check.py`).
+- **Finestra Informazioni** (pulsante nella barra laterale o `F1`) con versione, licenza MIT, componenti di terze parti, sito del progetto e cartella dei dati.
+- **Tastiera e focus visibile**: `Tab` raggiunge tutti i controlli, con un anello blu sul controllo attivo; `Spazio` e `Invio` li attivano.
+- **Suggerimenti (tooltip)** con la scorciatoia e il motivo per cui un pulsante è disattivato.
+- **Stati vuoti** con spiegazione e pulsante d'azione nelle liste di Analisi spazio, Duplicati e Avvio automatico; **progresso reale** nella Pulizia (barra determinata) e testo di ciò che sta facendo nelle altre scansioni.
+- **Errori in italiano comprensibile**; il dettaglio tecnico finisce nel registro attività.
+
+### Scorciatoie da tastiera
+
+| Tasto | Azione |
+|---|---|
+| `Ctrl+1` … `Ctrl+5` | Panoramica, Pulizia, Analisi spazio, Duplicati, Avvio automatico |
+| `F5` | Analizza / Aggiorna nella pagina corrente |
+| `Esc` | Annulla l'operazione in corso |
+| `Ctrl+B` | Comprimi / espandi la barra laterale |
+| `F1` | Informazioni |
 
 ## Sicurezza
 
@@ -75,7 +96,9 @@ PulisciPC/
 ├─ main.py               avvio: DPI awareness e lancio dell'interfaccia
 ├─ pulisci/
 │  ├─ app.py             finestra principale e pagine
-│  ├─ ui.py              componenti grafici condivisi
+│  ├─ ui.py              componenti grafici condivisi (colori, tooltip, focus, stati vuoti)
+│  ├─ settings.py        impostazioni persistenti (JSON)
+│  ├─ dialogs.py         finestra Informazioni e visualizzatore di testo
 │  ├─ utils.py           formattazione, amministratore/UAC, dischi, Cestino, percorsi protetti, log
 │  ├─ cleaner.py         categorie di pulizia, scansione, cancellazione
 │  ├─ analyzer.py        albero delle dimensioni e file più grandi
