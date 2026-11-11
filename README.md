@@ -26,6 +26,8 @@ PC Cleaner (nel progetto: *PulisciPC*) ti aiuta a recuperare spazio su Windows 1
 
 L'installer per Windows è nella sezione **[Releases](../../releases/latest)**: scarica `PCCleaner-Setup-1.2.0.exe` ed eseguilo.
 
+Per Windows a 32 bit (x86) c'è `PCCleaner-Setup-1.2.0-32bit.exe`: stesse funzioni, stessa licenza. PC Cleaner usa CustomTkinter/tkinter, che esistono anche a 32 bit; Prisma e Audio Extractor usano Qt 6, che non ha build a 32 bit per Windows, quindi per loro esiste solo la versione a 64 bit.
+
 ## Funzionalità
 
 - **Panoramica**: spazio occupato da ogni disco con barre colorate, contenuto del Cestino e accesso rapido alle altre sezioni.
@@ -85,6 +87,8 @@ python -m venv .venv
 ```bat
 build.bat             :: genera le icone e compila dist\PCCleaner\ con PyInstaller
 build_installer.bat   :: crea installer\PCCleaner-Setup-<versione>.exe (richiede Inno Setup 6)
+build_installer_x86.bat :: versione a 32 bit: serve un Python a 32 bit con tkinter, indicato con `set PY32=C:\...\python.exe`;
+                         usa build_x86\ e dist_x86\ e crea installer\PCCleaner-Setup-<versione>-32bit.exe (ISCC /DX86=1)
 ```
 
 Le icone dell'interfaccia (`assets\icons`) si rigenerano con `make_icons.py`, che usa il font di sistema *Segoe MDL2 Assets*.

@@ -5,3 +5,5 @@ build/
 dist/
 installer/*.exe
 .omc/
+build_x86/
+dist_x86/
