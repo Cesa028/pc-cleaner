@@ -150,7 +150,7 @@ Ordinate per importanza.
 ### 4.5 Distribuzione
 22. **Exe senza firma digitale.** Windows SmartScreen mostra «PC protetto» e alcuni antivirus segnalano per errore gli exe creati con PyInstaller in modalità onefile. Soluzioni: firma con certificato, oppure build `--onedir` (segnalata meno spesso).
 23. **Avvio lento.** La modalità onefile estrae i file in `%TEMP%\_MEI…` a ogni avvio, quindi l'app impiega 1–3 secondi a partire. Se l'app viene chiusa male, le cartelle `_MEI` restano in `%TEMP%`; la pulizia «Temp utente» le elimina dopo 24 ore.
-24. **Compatibilità.** Python 3.13 richiede Windows 10 o successivo, a 64 bit. Su Windows 7/8 o a 32 bit non parte.
+24. **Compatibilità.** Python 3.13 richiede Windows 10 o successivo. L'installer unico include la build a 64 bit e quella a 32 bit e sceglie da solo quella giusta. Su Windows 7/8 non parte.
 25. **Variabili di debug.** Risolto: `PULISCI_PAGE` e `PULISCI_SCAN` sono state rimosse.
 
 ### 4.6 Funzioni mancanti (idee)

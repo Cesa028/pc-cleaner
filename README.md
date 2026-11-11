@@ -95,7 +95,8 @@ python -m venv .venv
 ```bat
 build.bat             :: genera le icone e compila dist\PCCleaner\ con PyInstaller
 build_installer.bat   :: crea l'installer unico installer\PCCleaner-Setup-<versione>.exe (32 e 64 bit, richiede Inno Setup 6);
-                         con `set PY32=C:\...\python.exe` (Python a 32 bit con tkinter) ricostruisce anche dist_x86\nbuild_installer_x86.bat :: costruisce solo dist_x86\PCCleaner (chiamato da build_installer.bat, usabile anche da solo)
+                         con `set PY32=C:\...\python.exe` (Python a 32 bit con tkinter) ricostruisce anche dist_x86
+build_installer_x86.bat :: costruisce solo dist_x86\PCCleaner (chiamato da build_installer.bat, usabile anche da solo)
 ```
 
 Le icone dell'interfaccia (`assets\icons`) si rigenerano con `make_icons.py`, che usa il font di sistema *Segoe MDL2 Assets*.
